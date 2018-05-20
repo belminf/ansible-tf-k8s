@@ -1,0 +1,84 @@
+- hosts: all
+  become: yes
+  remote_user: "{{ admin_user }}"
+  tasks:
+
+   - name: install docker
+     apt:
+       name: docker.io
+       update_cache: true
+
+   - name: apt transport https
+     apt:
+       name: apt-transport-https
+
+   - name: add k8 apt-key
+     apt_key:
+       url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+
+   - name: add k8 repo
+     apt_repository:
+      repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
+      filename: kubernetes
+
+   - name: install kubelet
+     apt:
+       name: kubelet
+       update_cache: true
+
+   - name: install kubeadm
+     apt: name=kubeadm
+
+- hosts: master
+  become: yes
+  vars:
+    flannel_yaml: https://raw.githubusercontent.com/coreos/flannel/v0.10.0/Documentation/kube-flannel.yml
+  tasks:
+    
+    - name: install kubectl
+      apt:
+        name: kubectl
+
+    - name: initialize the cluster
+      shell: kubeadm init --pod-network-cidr=10.244.0.0/16 >> cluster_initialized.txt
+      args:
+        chdir: $HOME
+        creates: cluster_initialized.txt
+
+    - name: create .kube directory
+      become_user: "{{ admin_user }}"
+      file:
+        path: $HOME/.kube
+        state: directory
+        mode: 0755
+
+    - name: copy admin.conf to user's kube config
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/{{ admin_user }}/.kube/config
+        remote_src: yes
+        owner: "{{ admin_user }}"
+
+    - name: install Pod network
+      become_user: "{{ admin_user }}"
+      shell: kubectl apply -f {{ flannel_yaml }} >> pod_network_setup.txt
+      args:
+        chdir: $HOME
+        creates: pod_network_setup.txt
+
+    - name: get join command
+      shell: kubeadm token create --print-join-command
+      register: join_command_raw
+
+    - name: set join command
+      set_fact:
+        join_command: "{{ join_command_raw.stdout_lines[0] }}"
+
+- hosts: nodes
+  become: yes
+  tasks:
+    - name: join cluster
+      shell: "{{ hostvars['master'].join_command }} >> node_joined.txt"
+      args:
+        chdir: $HOME
+        creates: node_joined.txt      

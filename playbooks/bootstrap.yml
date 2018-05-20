@@ -1,0 +1,16 @@
+- hosts: all
+  remote_user: root
+  become: yes
+  tasks:
+    - name: create non-root user
+      user: name={{ admin_user }} groups=sudo shell=/bin/bash
+
+    - name: change sudo to passwordless
+      lineinfile:
+        dest: /etc/sudoers
+        regexp: '^%sudo '
+        line: '%sudo ALL=(ALL) NOPASSWD: ALL'
+        validate: 'visudo -cf %s'
+
+    - name: add pubkeys from GitHub
+      authorized_key: user={{ admin_user }} key=https://github.com/{{ github_user }}.keys

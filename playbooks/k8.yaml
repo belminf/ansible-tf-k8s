@@ -30,6 +30,7 @@
      apt: name=kubeadm
 
 - hosts: master
+  remote_user: "{{ admin_user }}"
   become: yes
   vars:
     flannel_yaml: https://raw.githubusercontent.com/coreos/flannel/v0.10.0/Documentation/kube-flannel.yml
@@ -75,6 +76,7 @@
         join_command: "{{ join_command_raw.stdout_lines[0] }}"
 
 - hosts: nodes
+  remote_user: "{{ admin_user }}"
   become: yes
   tasks:
     - name: join cluster
